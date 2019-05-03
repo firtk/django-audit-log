@@ -7,6 +7,15 @@ from audit_log.models import fields
 from audit_log.models.managers import AuditLogManager
 
 
+def _disable_audit_log_managers(instance):
+    for attr in dir(instance):
+        try:
+            if isinstance(getattr(instance, attr), AuditLogManager):
+                getattr(instance, attr).disable_tracking()
+        except AttributeError:
+            pass
+
+
 def _enable_audit_log_managers(instance):
     for attr in dir(instance):
         try:
