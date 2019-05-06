@@ -5,6 +5,11 @@ from django.utils.functional import curry
 from audit_log import registration, settings
 from audit_log.models import fields
 from audit_log.models.managers import AuditLogManager
+from audit_log.context_managers import (
+    _is_creating_user_tracking_disabled,
+    _is_last_user_tracking_disabled,
+)
+
 
 def _disable_audit_log_managers(instance):
     for attr in dir(instance):
@@ -55,37 +60,48 @@ class UserLoggingMiddleware(MiddlewareMixin):
 
     def _update_pre_save_info(self, user, session, sender, instance, **kwargs):
         registry = registration.FieldRegistry(fields.LastUserField)
-        if sender in registry:
+        if (
+            sender in registry and
+            not _is_last_user_tracking_disabled(sender) and
+            not _is_last_user_tracking_disabled(instance)
+        ):
             for field in registry.get_fields(sender):
                 setattr(instance, field.name, user)
 
         registry = registration.FieldRegistry(fields.LastSessionKeyField)
-        if sender in registry:
+        if (
+            sender in registry and
+            not _is_last_user_tracking_disabled(sender) and
+            not _is_last_user_tracking_disabled(instance)
+        ):
             for field in registry.get_fields(sender):
                 setattr(instance, field.name, session)
-
 
     def _update_post_save_info(self, user, session, sender, instance, created, **kwargs ):
         if created:
             registry = registration.FieldRegistry(fields.CreatingUserField)
-            if sender in registry:
+            if (
+                sender in registry and
+                not _is_creating_user_tracking_disabled(sender) and
+                not _is_creating_user_tracking_disabled(instance)
+            ):
                 for field in registry.get_fields(sender):
                     setattr(instance, field.name, user)
                     _disable_audit_log_managers(instance)
                     instance.save()
                     _enable_audit_log_managers(instance)
 
-
             registry = registration.FieldRegistry(fields.CreatingSessionKeyField)
-            if sender in registry:
+            if (
+                sender in registry and
+                not _is_creating_user_tracking_disabled(sender) and
+                not _is_creating_user_tracking_disabled(instance)
+            ):
                 for field in registry.get_fields(sender):
                     setattr(instance, field.name, session)
                     _disable_audit_log_managers(instance)
                     instance.save()
                     _enable_audit_log_managers(instance)
-
-
-
 
 
 class JWTAuthMiddleware(MiddlewareMixin):
