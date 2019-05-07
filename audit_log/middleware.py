@@ -74,7 +74,8 @@ class UserLoggingMiddleware(MiddlewareMixin):
         registry = registration.FieldRegistry(fields.LastUserField)
         if sender in registry:
             for field in registry.get_fields(sender):
-                setattr(instance, field.name, user)
+                if not fields.is_field_changed(instance, field.name):
+                    setattr(instance, field.name, user)
 
         registry = registration.FieldRegistry(fields.LastSessionKeyField)
         if sender in registry:
