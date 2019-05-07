@@ -1,7 +1,24 @@
 from django.db import models
 from django.conf import settings
+from django.db.models.fields.related_descriptors import ForwardManyToOneDescriptor
 
 from audit_log import registration
+
+
+def is_field_changed(instance, field_name):
+    return getattr(instance, '__audit_log_{0}_changed'.format(field_name), False)
+
+
+def set_field_changed(instance, field_name):
+    setattr(instance, '__audit_log_{0}_changed'.format(field_name), True)
+
+
+class ForwardManyToOneDescriptorAuditTrack(ForwardManyToOneDescriptor):
+
+    def __set__(self, instance, value):
+        result = super(ForwardManyToOneDescriptorAuditTrack, self).__set__(instance, value)
+        set_field_changed(instance, self.field.name)
+        return result
 
 
 class LastUserField(models.ForeignKey):
@@ -10,6 +27,8 @@ class LastUserField(models.ForeignKey):
     of a model. None will be the value for AnonymousUser.
     """
 
+    forward_related_accessor_class = ForwardManyToOneDescriptorAuditTrack
+
     def __init__(self, to=getattr(settings, 'AUTH_USER_MODEL', 'auth.User'), on_delete=models.SET_NULL, null=True, editable=False,  **kwargs):
         super(LastUserField, self).__init__(to=to, on_delete=on_delete, null=null, editable=editable, **kwargs)
 
@@ -17,6 +36,7 @@ class LastUserField(models.ForeignKey):
         super(LastUserField, self).contribute_to_class(cls, name)
         registry = registration.FieldRegistry(self.__class__)
         registry.add_field(cls, self)
+
 
 class LastSessionKeyField(models.CharField):
     """
