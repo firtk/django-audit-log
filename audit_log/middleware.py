@@ -24,15 +24,20 @@ def _enable_audit_log_managers(instance):
             pass
 
 
+def _get_user_from_request(request):
+    if hasattr(request, 'user') and request.user.is_authenticated:
+        return request.user
+    if getattr(request, '_drf_audit_user', None) and request._drf_audit_user.is_authenticated:
+        return request._drf_audit_user
+    return None
+
+
 class UserLoggingMiddleware(MiddlewareMixin):
     def process_request(self, request):
         if settings.DISABLE_AUDIT_LOG:
             return
-        if not request.method in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
-            if hasattr(request, 'user') and request.user.is_authenticated:
-                user = request.user
-            else:
-                user = None
+        if request.method not in ('GET', 'HEAD', 'OPTIONS', 'TRACE'):
+            user = _get_user_from_request(request)
             session = request.session.session_key
             update_pre_save_info = curry(self._update_pre_save_info, user, session)
             update_post_save_info = curry(self._update_post_save_info, user, session)
@@ -98,7 +103,6 @@ class JWTAuthMiddleware(MiddlewareMixin):
     def get_user_jwt(self, request):
         from rest_framework.request import Request
         from rest_framework.exceptions import AuthenticationFailed
-        from django.utils.functional import SimpleLazyObject
         from django.contrib.auth.middleware import get_user
         from rest_framework_jwt.authentication import JSONWebTokenAuthentication
 
@@ -120,3 +124,42 @@ class JWTAuthMiddleware(MiddlewareMixin):
          Edit your MIDDLEWARE setting to insert 'django.contrib.sessions.middleware.SessionMiddleware'."""
 
         request.user = SimpleLazyObject(lambda: self.get_user_jwt(request))
+
+
+class AuditJWTAuthMiddleware(MiddlewareMixin):
+    """
+    Different implementation of JWTAuthMiddleware: it doesn't change the existing
+    authentication flow (i.e. it doesn't change request object).
+
+    It allows to specify custom authenticator for JWT as well.
+    """
+
+    def get_user_jwt(self, request):
+        from django.contrib.auth.middleware import get_user
+        from rest_framework.request import Request
+        from rest_framework.exceptions import APIException
+        from rest_framework.settings import import_from_string
+
+        user = get_user(request)
+        if user.is_authenticated:
+            return user
+        jwt_authenticator = import_from_string(
+            settings.AUDIT_LOG_JWT_AUTHENTICATOR,
+            'AUDIT_LOG_JWT_AUTHENTICATOR',
+        )
+        user_auth_tuple = None
+        try:
+            user_auth_tuple = jwt_authenticator().authenticate(Request(request))
+        except APIException:
+            pass
+        if user_auth_tuple is not None:
+            user = user_auth_tuple[0]
+        return user
+
+    def process_request(self, request):
+        from django.utils.functional import SimpleLazyObject
+        assert hasattr(request, 'session'),\
+        """The Django authentication middleware requires session middleware to be installed.
+         Edit your MIDDLEWARE setting to insert 'django.contrib.sessions.middleware.SessionMiddleware'."""
+
+        request._drf_audit_user = SimpleLazyObject(lambda: self.get_user_jwt(request))
