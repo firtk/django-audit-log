@@ -52,7 +52,8 @@ class UserLoggingMiddleware(MiddlewareMixin):
 
     def _update_pre_save_info(self, user, session, sender, instance, **kwargs):
         # creating fields
-        if not instance.pk:
+        is_adding = instance._state.adding  # Access to django internal stuff, may change in next version
+        if not instance.pk or is_adding:  # instance.pk may be set manually, check additionally the `is_adding`
             registry = registration.FieldRegistry(fields.CreatingUserField)
             if sender in registry:
                 for field in registry.get_fields(sender):
