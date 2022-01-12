@@ -3,8 +3,8 @@ from django.shortcuts import get_object_or_404
 from django.http import HttpResponse
 from django.template import Template, RequestContext
 from django.views import generic
-from .models import (Product, ProductCategory, Employee,
-                        ExtremeWidget, Property, PropertyOwner)
+from audit_log.tests.audit_log_tests.models import (Product, ProductCategory, Employee,
+                        ExtremeWidget, Property, PropertyOwner, Item, SpecialItem)
 
 
 def index(request):
@@ -90,3 +90,27 @@ class EmployeeUpdateView(generic.UpdateView):
     template_name = 'form.html'
     success_url = '/'
     fields = ['email']
+
+class ItemCreateView(generic.CreateView):
+    model = Item
+    template_name = 'form.html'
+    success_url = '/'
+    fields = ['name', 'type']
+
+class ItemUpdateView(generic.UpdateView):
+    model = Item
+    template_name = 'form.html'
+    success_url = '/'
+    fields = ['name', 'type']
+
+class SpecialItemCreateView(generic.CreateView):
+    model = SpecialItem
+    template_name = 'form.html'
+    success_url = '/'
+    fields = ['name', 'type']
+
+class SpecialItemUpdateView(generic.UpdateView):
+    model = SpecialItem
+    template_name = 'form.html'
+    success_url = '/'
+    fields = ['name', 'type']

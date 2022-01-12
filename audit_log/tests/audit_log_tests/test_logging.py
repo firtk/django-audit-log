@@ -1,35 +1,15 @@
 from django.test import TestCase
 from django.db import models
 from .models import (Product, WarehouseEntry, ProductCategory, ExtremeWidget,
-                        SaleInvoice, Employee, ProductRating, Property, PropertyOwner)
-from .views import (index, rate_product, CategoryCreateView, ProductCreateView,
-                    ProductDeleteView, ProductUpdateView, ExtremeWidgetCreateView,
-                    PropertyOwnerCreateView, PropertyCreateView, PropertyUpdateView,
-                    EmployeeCreateView, EmployeeUpdateView)
+                        SaleInvoice, Employee, ProductRating, Property, PropertyOwner,
+                        Item, SpecialItem)
 from django.test.client import Client
 
-from django.conf.urls import patterns, include, url
+from django.urls import reverse
 
 # Uncomment the next two lines to enable the admin:
 from django.contrib import admin
 admin.autodiscover()
-
-urlpatterns = patterns('',
-    url(r'^/$', index),
-    url(r'^rate/(\d)/$', rate_product),
-    url(r'^category/create/$', CategoryCreateView.as_view()),
-    url(r'^product/create/$', ProductCreateView.as_view()),
-    url(r'^product/update/(?P<pk>\d+)/$', ProductUpdateView.as_view()),
-    url(r'^product/delete/(?P<pk>\d+)/$', ProductDeleteView.as_view()),
-    url(r'^extremewidget/create/$', ExtremeWidgetCreateView.as_view()),
-    url(r'^propertyowner/create/$', PropertyOwnerCreateView.as_view()),
-    url(r'^property/create/$', PropertyCreateView.as_view()),
-    url(r'^property/update/(?P<pk>\d+)/$', PropertyUpdateView.as_view()),
-    url(r'^employee/create/$', EmployeeCreateView.as_view()),
-    url(r'^employee/update/(?P<pk>\d+)/$', EmployeeUpdateView.as_view()),
-)
-
-
 
 def __setup_admins():
     from django.contrib.auth.models import User
@@ -235,3 +215,45 @@ class TestOneToOne(TestCase):
         self.assertEqual(prop.audit_log.all()[1].action_type, 'I')
         self.assertEqual(prop.audit_log.all()[0].owned_by, owner2)
         self.assertEqual(prop.audit_log.all()[1].owned_by, owner1)
+
+
+class TestProxyModel(TestCase):
+    urls = __name__
+    
+    def test_audit_fields(self):
+        _setup_admin()
+        # Create Normal Item with user 1
+        client_1 = Client()
+        client_1.login(username = 'admin@example.com', password = 'admin')
+        client_1.post('/item/create/', {'name': 'Sword', 'type': 'NORMAL'})
+        normal_item = Item.objects.get(pk=1)
+        self.assertEqual(normal_item.created_by.username, 'admin@example.com')
+        self.assertEqual(normal_item.modified_by.username, 'admin@example.com')
+        self.assertEqual(normal_item.created_session, client_1.session.session_key)
+        self.assertEqual(normal_item.modified_session, client_1.session.session_key)
+
+        # Create Special Item with user 2
+        client_2 = Client()
+        client_2.login(username = 'admin1@example.com', password = 'admin1')
+        client_2.post('/special-item/create/', {'name': 'Legendary Sword', 'type': 'SPECIAL'})
+        special_item = SpecialItem.objects.get(pk=2)
+        self.assertEqual(special_item.created_by.username, 'admin1@example.com')
+        self.assertEqual(special_item.modified_by.username, 'admin1@example.com')
+        self.assertEqual(special_item.created_session, client_2.session.session_key)
+        self.assertEqual(special_item.modified_session, client_2.session.session_key)
+
+        # Update Special Item with User 1
+        client_1.post('/special-item/update/2/', {'name': 'Epic Sword', 'type': 'NORMAL'})
+        special_item = SpecialItem.objects.get(pk=2)
+        self.assertEqual(special_item.created_by.username, 'admin1@example.com')
+        self.assertEqual(special_item.modified_by.username, 'admin@example.com')
+        self.assertEqual(special_item.created_session, client_2.session.session_key)
+        self.assertEqual(special_item.modified_session, client_1.session.session_key)
+
+        # Update Normal Item with User 2
+        client_2.post('/item/update/1/', {'name': 'Normal Sword', 'type': 'NORMAL'})
+        normal_item = Item.objects.get(pk=1)
+        self.assertEqual(normal_item.created_by.username, 'admin@example.com')
+        self.assertEqual(normal_item.modified_by.username, 'admin1@example.com')
+        self.assertEqual(normal_item.created_session, client_1.session.session_key)
+        self.assertEqual(normal_item.modified_session, client_2.session.session_key)

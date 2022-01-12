@@ -17,6 +17,7 @@ CUSTOM_INSTALLED_APPS = (
 )
 
 ALWAYS_INSTALLED_APPS = (
+    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
@@ -36,12 +37,27 @@ ALWAYS_MIDDLEWARE_CLASSES = (
 
 
 settings.configure(
-    SECRET_KEY="django_tests_secret_key",
+    SECRET_KEY='django_tests_secret_key',
     DEBUG=True,
     TEMPLATE_DEBUG=True,
+    TEMPLATES=[
+        {
+            'BACKEND': 'django.template.backends.django.DjangoTemplates',
+            'DIRS': [],
+            'APP_DIRS': True,
+            'OPTIONS': {
+                'context_processors': [
+                    'django.template.context_processors.debug',
+                    'django.template.context_processors.request',
+                    'django.contrib.auth.context_processors.auth',
+                    'django.contrib.messages.context_processors.messages',
+                ],
+            },
+        },
+    ],
     ALLOWED_HOSTS=[],
     INSTALLED_APPS=ALWAYS_INSTALLED_APPS + CUSTOM_INSTALLED_APPS,
-    MIDDLEWARE_CLASSES=ALWAYS_MIDDLEWARE_CLASSES,
+    MIDDLEWARE=ALWAYS_MIDDLEWARE_CLASSES,
     ROOT_URLCONF='tests.urls',
     DATABASES={
         'default': {

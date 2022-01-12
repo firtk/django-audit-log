@@ -33,6 +33,20 @@ def _get_user_from_request(request):
     return None
 
 
+def _get_fields_of_sender(sender, registry):
+        fields = []
+        if sender in registry:
+            fields = registry.get_fields(sender)
+        else:
+            # If sender model is not found in registry.
+            # Check it's base classes.
+            for base in sender.__bases__:
+                if base in registry:
+                    fields = registry.get_fields(base)
+                    return fields
+        return fields
+
+
 class UserLoggingMiddleware(MiddlewareMixin):
     def process_request(self, request):
         if settings.DISABLE_AUDIT_LOG:
@@ -60,28 +74,28 @@ class UserLoggingMiddleware(MiddlewareMixin):
         is_adding = instance._state.adding  # Access to django internal stuff, may change in next version
         if not instance.pk or is_adding:  # instance.pk may be set manually, check additionally the `is_adding`
             registry = registration.FieldRegistry(fields.CreatingUserField)
-            if sender in registry:
-                for field in registry.get_fields(sender):
-                    if not getattr(instance, field.name, None):
-                        setattr(instance, field.name, user)
+            fields_of_sender = _get_fields_of_sender(sender, registry)
+            for field in fields_of_sender:
+                if not getattr(instance, field.name, None):
+                    setattr(instance, field.name, user)
 
             registry = registration.FieldRegistry(fields.CreatingSessionKeyField)
-            if sender in registry:
-                for field in registry.get_fields(sender):
-                    if not getattr(instance, field.name, None):
-                        setattr(instance, field.name, session)
+            fields_of_sender = _get_fields_of_sender(sender, registry)
+            for field in fields_of_sender:
+                if not getattr(instance, field.name, None):
+                    setattr(instance, field.name, session)
 
         # modifying fields
         registry = registration.FieldRegistry(fields.LastUserField)
-        if sender in registry:
-            for field in registry.get_fields(sender):
-                if not fields.is_field_changed(instance, field.name):
-                    setattr(instance, field.name, user)
+        fields_of_sender = _get_fields_of_sender(sender, registry)
+        for field in fields_of_sender:
+            if not fields.is_field_changed(instance, field.name):
+                setattr(instance, field.name, user)
 
         registry = registration.FieldRegistry(fields.LastSessionKeyField)
-        if sender in registry:
-            for field in registry.get_fields(sender):
-                setattr(instance, field.name, session)
+        fields_of_sender = _get_fields_of_sender(sender, registry)
+        for field in fields_of_sender:
+            setattr(instance, field.name, session)
 
 
 class JWTAuthMiddleware(MiddlewareMixin):
